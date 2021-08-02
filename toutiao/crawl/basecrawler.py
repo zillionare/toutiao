@@ -1,5 +1,7 @@
 import asyncio
 import base64
+from datetime import tzinfo
+import arrow
 import logging
 import os
 from io import BytesIO
@@ -12,7 +14,6 @@ from pyppeteer.network_manager import Response
 from pyppeteer.page import Page
 
 logger = logging.getLogger(__name__)
-
 
 class ResponseInterceptor:
     """
@@ -64,6 +65,7 @@ class BaseCrawler:
             self._browser = await pp.launch(
                 {"headless": True, "args": ["--no-sandbox"]}
             )
+            print(await self._browser.userAgent())
 
     async def stop(self):
         await self._browser.close()
@@ -153,7 +155,15 @@ class BaseCrawler:
         await page.Jeval(option, "el => el.click()")
         await page.screenshot(path="/root/trader/screenshot/select_2.jpg")
 
-    async def screenshot(self, page: Page, filename: str):
+    def error_time(self):
+        n = arrow.now()
+        return f"{n.year:02d}{n.month:02d}{n.day:02d}-{n.hour:02d}{n.minute:02d}"
+
+    async def screenshot(self, page: Page, filename: str=None):
+        if filename is None:
+            path = page.url.split("/")[-1].split("?")[0]
+            filename = f"{path}-{self.error_time()}.png"
+
         if self.screenshot_dir:
             await page.screenshot(path=os.path.join(self.screenshot_dir, filename))
 
@@ -177,3 +187,5 @@ class BaseCrawler:
         img = Image.open(buffer)
 
         return img
+
+
