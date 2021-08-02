@@ -11,7 +11,7 @@ import pyppeteer as pp
 from PIL import Image
 from pyppeteer.browser import Browser
 from pyppeteer.network_manager import Response
-from pyppeteer.page import Page
+from pyppeteer.page import Page, PageError
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,7 @@ class BaseCrawler:
             filename = f"{path}-{self.error_time()}.png"
 
         if self.screenshot_dir:
+            await page.setViewport({"width": 1024, "height": 1800})
             await page.screenshot(path=os.path.join(self.screenshot_dir, filename))
 
     async def get_img_by_data_url(self, page: Page, selector: str):
@@ -187,5 +188,29 @@ class BaseCrawler:
         img = Image.open(buffer)
 
         return img
+
+    async def click(self, page: Page, selector: str, visible=False, hidden=False, timeout:int=10*1000):
+        """combine `waitFor` and `click`
+
+        if selector starts with "//", then it's treated as xpath
+
+        Args:
+            page (Page): [description]
+            selector (str): [description]
+            visible: params required by waitForXpath/waitForSelector
+        """
+        elements = None
+        if selector.startswith("//"):
+            elements = await page.waitForXPath(selector, visible=visible, hidden=hidden, timeout=timeout)
+        else:
+            elements = await page.waitForSelector(selector, visible=visible, hidden=hidden, timeout=timeout)
+
+        if elements is None or len(elements) == 0:
+            raise PageError(message=f"failed to locate element by {selector}")
+
+        if isinstance(elements, list):
+            await elements[0].click()
+        else:
+            await elements.click()
 
 

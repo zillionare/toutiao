@@ -15,3 +15,12 @@ class TestToutiaoClient(unittest.TestCase):
         tt = ToutiaoClient()
         self.assertTrue(await tt.start())
         await tt.stop()
+
+    @async_test
+    async def test_post_wtt(self):
+        tt = ToutiaoClient()
+        await tt.start()
+        await tt.online()
+
+        pics =[ "/tmp/tt.png"]
+        await tt.post_weitoutiao("hello", pics)

@@ -22,11 +22,20 @@ class ToutiaoClient(BaseCrawler):
         super().__init__(base_url, screenshot_dir=screenshot_dir)
 
         self._login_decay_time = 1.5
+        self._login_success_event = asyncio.Event()
+        self._online = False
 
     async def start(self, *args, **kwargs):
         await super().start()
 
         asyncio.create_task(self.login())
+
+    async def online(self):
+        if self._online:
+            return
+        else:
+            await self._login_success_event.wait()
+            self._online = True
 
     async def login(self):
         page, _ = await self.goto("/auth/page/login")
@@ -43,6 +52,10 @@ class ToutiaoClient(BaseCrawler):
             if page.url.find("profile_v4") == -1:
                 raise errors.NavigationError("login failed due to we're not redirected to right page")
 
+            logger.info("login succeed")
+            self._online = True
+            self._login_success_event.set()
+
             return True
         except Exception as e:
             self._login_decay_time *= 2
@@ -51,3 +64,25 @@ class ToutiaoClient(BaseCrawler):
             await self.screenshot(page)
             await asyncio.sleep(self._login_decay_time)
             await self.login()
+
+    async def post_article(self, doc):
+        pass
+
+    async def post_weitoutiao(self, text:str, pics: List[str], topic:str = None):
+        page, _ = await self.goto("profile_v4/weitoutiao/publish")
+
+        try:
+            await page.waitForXPath(Selectors.post_wtt_toolbar_img)
+
+            # upload local files
+            await self.click(page, Selectors.post_wtt_toolbar_img)
+            input_control = await page.querySelector(Selectors.post_wtt_upload_img)[0]
+            await input_control.uploadFile(*pics)
+            await self.click(page, Selectors.post_wtt_upload_img_confirm)
+
+            # input text
+            await page.Jeval(Selectors.post_wtt_text_box, f'el->el.value={text}')
+            await self.click(page, Selectors.post_wtt_publish_btn)
+        except Exception as e:
+            logger.warning(str(e))
+            await self.screenshot(page)
