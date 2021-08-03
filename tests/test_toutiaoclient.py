@@ -2,7 +2,6 @@ import logging
 import unittest
 
 import pyppeteer
-
 from tests import async_test
 from toutiao.client import ToutiaoClient
 

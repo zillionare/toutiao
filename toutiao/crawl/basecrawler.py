@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import Any, Awaitable, Callable, List, Tuple, Union
 
 import arrow
+
 import pyppeteer as pp
 from PIL import Image
 from pyppeteer.browser import Browser

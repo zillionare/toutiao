@@ -2,7 +2,6 @@
 import os
 
 import sanic
-
 from toutiao.client import ToutiaoClient
 
 app = sanic.Sanic("toutiaoClient")

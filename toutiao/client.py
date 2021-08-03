@@ -4,7 +4,6 @@ import os
 from typing import List
 
 from pyppeteer import errors
-
 from toutiao.crawl.basecrawler import BaseCrawler
 from toutiao.crawl.controls import Button, Input, Link
 from toutiao.crawl.selectors import Selectors
