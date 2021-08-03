@@ -1,14 +1,13 @@
 import asyncio
-from asyncio.log import logger
+import logging
 import os
 from typing import List
 
-import pyppeteer
 from pyppeteer import errors
 
 from toutiao.crawl.basecrawler import BaseCrawler
+from toutiao.crawl.controls import Button, Input, Link
 from toutiao.crawl.selectors import Selectors
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,9 @@ class ToutiaoClient(BaseCrawler):
 
             await page.waitForNavigation()
             if page.url.find("profile_v4") == -1:
-                raise errors.NavigationError("login failed due to we're not redirected to right page")
+                raise errors.NavigationError(
+                    "login failed due to we're not redirected to right page"
+                )
 
             logger.info("login succeed")
             self._online = True
@@ -59,8 +60,12 @@ class ToutiaoClient(BaseCrawler):
             return True
         except Exception as e:
             self._login_decay_time *= 2
-            logger.warning("login failed due to %s, retrying in seconds: %s", str(e), self._login_decay_time)
-            
+            logger.warning(
+                "login failed due to %s, retrying in seconds: %s",
+                str(e),
+                self._login_decay_time,
+            )
+
             await self.screenshot(page)
             await asyncio.sleep(self._login_decay_time)
             await self.login()
@@ -68,21 +73,41 @@ class ToutiaoClient(BaseCrawler):
     async def post_article(self, doc):
         pass
 
-    async def post_weitoutiao(self, text:str, pics: List[str], topic:str = None):
+    async def post_weitoutiao(self, text: str, pics: List[str], topic: str = None):
         page, _ = await self.goto("profile_v4/weitoutiao/publish")
 
         try:
-            await page.waitForXPath(Selectors.post_wtt_toolbar_img)
+            # 打开图片上传对话框，如果pics存在，则上传图片
+            if pics:
+                pic_button = await Button("图片").bind(page)
+                await pic_button.click()
 
-            # upload local files
-            await self.click(page, Selectors.post_wtt_toolbar_img)
-            input_control = await page.querySelector(Selectors.post_wtt_upload_img)[0]
-            await input_control.uploadFile(*pics)
-            await self.click(page, Selectors.post_wtt_upload_img_confirm)
+                # collect pics by input control
+                files = await Input("本地上传").bind(page)
+                await files.uploadFile(*pics)
+
+                # confirm upload
+                confirm_button = await Button("确定").bind(page)
+                await confirm_button.click()
 
             # input text
-            await page.Jeval(Selectors.post_wtt_text_box, f'el->el.value={text}')
-            await self.click(page, Selectors.post_wtt_publish_btn)
+            edit_box = await page.querySelector("div.syl-editor div.ProseMirror")
+            html = self._format_paragraph(text)
+            await edit_box.Jeval(".", f"el->el.innerHTML={html}")
+
+            # 发布
+            publish_button = await Button("发布").bind(page)
+            await publish_button.click()
         except Exception as e:
             logger.warning(str(e))
             await self.screenshot(page)
+
+    def _format_paragraph(self, text):
+        """convert plain text to html paragraph
+
+        Args:
+            text ([type]): [description]
+        """
+        paras = text.split("\n")
+        html = [f"<p>{para}</p>" for para in paras]
+        return "".join(html)

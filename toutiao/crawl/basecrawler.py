@@ -1,12 +1,12 @@
 import asyncio
 import base64
-from datetime import tzinfo
-import arrow
 import logging
 import os
+from datetime import tzinfo
 from io import BytesIO
 from typing import Any, Awaitable, Callable, List, Tuple, Union
 
+import arrow
 import pyppeteer as pp
 from PIL import Image
 from pyppeteer.browser import Browser
@@ -14,6 +14,7 @@ from pyppeteer.network_manager import Response
 from pyppeteer.page import Page, PageError
 
 logger = logging.getLogger(__name__)
+
 
 class ResponseInterceptor:
     """
@@ -52,6 +53,10 @@ class BaseCrawler:
         # event_name -> (Event, data)
         self._events = {}
 
+        preload = os.path.join(os.path.dirname(__file__), "preload.js")
+        with open(preload, "r") as f:
+            self._preload_script = f.read()
+
     @property
     def base_url(self):
         return self._base_url
@@ -62,10 +67,18 @@ class BaseCrawler:
 
     async def start(self):
         if self._browser is None:
+            args = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-infobars",
+                "--window-position=0,0",
+                "--ignore-certifcate-errors",
+                "--ignore-certifcate-errors-spki-list",
+                '--user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3312.0 Safari/537.36"',
+            ]
             self._browser = await pp.launch(
-                {"headless": True, "args": ["--no-sandbox"]}
+                {"headless": True, "args": args, "ignoreHTTPSErrors": True}
             )
-            print(await self._browser.userAgent())
 
     async def stop(self):
         await self._browser.close()
@@ -95,6 +108,7 @@ class BaseCrawler:
             url = f"{self._base_url}/{url}"
 
         page: Page = await self._browser.newPage()
+        await page.evaluateOnNewDocument(self._preload_script)
 
         if interceptor:
             if name:
@@ -159,14 +173,18 @@ class BaseCrawler:
         n = arrow.now()
         return f"{n.year:02d}{n.month:02d}{n.day:02d}-{n.hour:02d}{n.minute:02d}"
 
-    async def screenshot(self, page: Page, filename: str=None):
+    async def screenshot(self, page: Page, filename: str = None):
         if filename is None:
             path = page.url.split("/")[-1].split("?")[0]
             filename = f"{path}-{self.error_time()}.png"
 
+        logger.info("screenshot <%s> for page: %s", filename, page.url)
+
         if self.screenshot_dir:
-            await page.setViewport({"width": 1024, "height": 1800})
             await page.screenshot(path=os.path.join(self.screenshot_dir, filename))
+            content_file = f"{path}-{self.error_time()}.html"
+            with open(os.path.join(self.screenshot_dir, content_file), "w") as f:
+                f.write(await page.content())
 
     async def get_img_by_data_url(self, page: Page, selector: str):
         """从`selector`指定的元素中的data-url获取image binary data
@@ -189,7 +207,14 @@ class BaseCrawler:
 
         return img
 
-    async def click(self, page: Page, selector: str, visible=False, hidden=False, timeout:int=10*1000):
+    async def click(
+        self,
+        page: Page,
+        selector: str,
+        visible=False,
+        hidden=False,
+        timeout: int = 10 * 1000,
+    ):
         """combine `waitFor` and `click`
 
         if selector starts with "//", then it's treated as xpath
@@ -201,9 +226,13 @@ class BaseCrawler:
         """
         elements = None
         if selector.startswith("//"):
-            elements = await page.waitForXPath(selector, visible=visible, hidden=hidden, timeout=timeout)
+            elements = await page.waitForXPath(
+                selector, visible=visible, hidden=hidden, timeout=timeout
+            )
         else:
-            elements = await page.waitForSelector(selector, visible=visible, hidden=hidden, timeout=timeout)
+            elements = await page.waitForSelector(
+                selector, visible=visible, hidden=hidden, timeout=timeout
+            )
 
         if elements is None or len(elements) == 0:
             raise PageError(message=f"failed to locate element by {selector}")
@@ -212,5 +241,3 @@ class BaseCrawler:
             await elements[0].click()
         else:
             await elements.click()
-
-

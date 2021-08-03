@@ -1,7 +1,9 @@
 """Main module."""
 import os
-from toutiao.client import ToutiaoClient
+
 import sanic
+
+from toutiao.client import ToutiaoClient
 
 app = sanic.Sanic("toutiaoClient")
 
@@ -20,7 +22,7 @@ async def show_qr_img(request):
     )
 
 
-if __name__ =="__main__":
+if __name__ == "__main__":
     tc = ToutiaoClient()
-    app.register_listener(tc.start, event='before_server_start')
+    app.register_listener(tc.start, event="before_server_start")
     app.run(host="0.0.0.0", port=3182, register_sys_signals=True, debug=True)
